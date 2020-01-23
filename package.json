@@ -9,10 +9,8 @@
   "author": "Evan Pavlica <evan@pavlica.us>",
   "license": "ISC",
   "dependencies": {
-    "command-line-args": "^4.0.1",
-    "noble": "^1.8.0"
+    "@abandonware/noble": "^1.9.2-5",
+    "command-line-args": "^4.0.1"
   },
-  "devDependencies": {
-    "pryjs": "^1.0.3"
-  }
+  "devDependencies": {}
 }

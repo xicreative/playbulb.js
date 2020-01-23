@@ -3,8 +3,9 @@
 // jshint esversion: 6, node: true
 'use strict';
 
+const { promisify } = require('util');
 const commandLineArgs = require('command-line-args');
-const noble = require('noble');
+const noble = require('@abandonware/noble');
 
 const optDefinitions = [
   { name: 'color',   type: String, alias: 'c' },
@@ -17,11 +18,11 @@ const COLOR_REGEXP = /^([0-9a-fA-F]{2}){4}$/;
 const PLAYBULB_SERVICE_UUIDS = ['ff08'];
 const PLAYBULB_CHARACTERISTIC_UUIDS = ['fffc', 'fffb'];
 const COLORS = {
-  red: new Buffer('00ff0000', 'hex'),
-  green: new Buffer('0000ff00', 'hex'),
-  blue: new Buffer('000000ff', 'hex'),
-  purple: new Buffer('00330066', 'hex'),
-  off: new Buffer('00000000', 'hex'),
+  red: Buffer.from('00ff0000', 'hex'),
+  green: Buffer.from('0000ff00', 'hex'),
+  blue: Buffer.from('000000ff', 'hex'),
+  purple: Buffer.from('00330066', 'hex'),
+  off: Buffer.from('00000000', 'hex'),
 };
 
 let colorOpt = getColorOpt();
@@ -40,44 +41,46 @@ function getColorOpt() {
   }
 }
 
-let timeout = setTimeout(() => {
-  console.warn('Timed out finding the Playbulb.');
-  process.exit(2);
-}, 2000);
+async function run () {
+  let timeout = setTimeout(() => {
+    console.warn('Timed out finding the Playbulb.');
+    process.exit(2);
+  }, 2000);
 
-noble.on('discover', (peripheral) => {
-  if (!/PLAYBULB/.test(peripheral.advertisement.localName)) { return; }
-  noble.stopScanning();
-  clearTimeout(timeout);
-
-  switch (options.command) {
-    case 'change':
-      getColorCharacteristic(peripheral).then((characteristic) => {
-        changeDeviceColor(characteristic, colorOpt).then(() => { process.exit(0); }, (err) => { process.exit(1); });
-      }, (err) => {
-        console.warn(err);
-      });
-      break;
-
-    case 'blink':
-      getColorCharacteristic(peripheral).then((characteristic) => {
-        blinkDevice(characteristic, colorOpt).then(() => { process.exit(0); }, (err) => {  process.exit(1); });
-      }, (err) => { console.warn(err); });
-      break;
-
-    default:
-      console.warn('Usage: playbulb [command] [options] \n command is one of: \n  - change\n  - blink');
-      process.exit(1);
-  }
-});
-
-noble.on('stateChange', (state) => {
-  if (state === 'poweredOn') {
-    noble.startScanning(null, false);
-  } else {
+  noble.on('discover', (peripheral) => {
+    if (!/PLAYBULB/.test(peripheral.advertisement.localName)) { return; }
     noble.stopScanning();
-  }
-});
+    clearTimeout(timeout);
+
+    switch (options.command) {
+      case 'change':
+        getColorCharacteristic(peripheral).then((characteristic) => {
+          changeDeviceColor(characteristic, colorOpt).then(() => { process.exit(0); }, (err) => { process.exit(1); });
+        }, (err) => {
+          console.warn(err);
+        });
+        break;
+
+      case 'blink':
+        getColorCharacteristic(peripheral).then((characteristic) => {
+          blinkDevice(characteristic, colorOpt).then(() => { process.exit(0); }, (err) => {  process.exit(1); });
+        }, (err) => { console.warn(err); });
+        break;
+
+      default:
+        console.warn('Usage: playbulb [command] [options] \n command is one of: \n  - change\n  - blink');
+        process.exit(1);
+    }
+  });
+
+  noble.on('stateChange', (state) => {
+    if (state === 'poweredOn') {
+      noble.startScanning(null, false);
+    } else {
+      noble.stopScanning();
+    }
+  });
+};
 
 function getColorCharacteristic(peripheral) {
   return new Promise((resolve, reject) => {
@@ -99,12 +102,14 @@ function getColorCharacteristic(peripheral) {
 
 function changeDeviceColor(characteristic, color) {
   return new Promise((resolve, reject) => {
-    characteristic.write(color);
+    characteristic.write(color, true, (err) => { if (err) { reject(err); } });
+
     setTimeout(() => {
       readDeviceColor(characteristic).then((data) => {
         if (data.equals(color)) { resolve(data); }
         else { console.log('Failed to set color'); reject(); }
       }, (err) => {
+        console.error(err);
         reject(err);
       });
     }, 100);
@@ -114,6 +119,7 @@ function changeDeviceColor(characteristic, color) {
 function readDeviceColor(characteristic) {
   return new Promise((resolve, reject) => {
     characteristic.read((err, data) => {
+
       if (err) { console.log('failed to read color'); reject(err); }
       resolve(data);
     });
@@ -147,3 +153,5 @@ function blinkDevice(characteristic, color) {
     }, (err) => { reject(err); });
   });
 }
+
+run();
